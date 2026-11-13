@@ -27,7 +27,8 @@ body{margin:0}
 .feed{display:flex;flex-direction:column;gap:8px}
 .entry{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
 .entry.gold{border-left-color:var(--gold)} .entry.silber{border-left-color:var(--silver)} .entry.bronze{border-left-color:var(--bronze)}
-.entry.warm{border-left-color:var(--good)} .entry.wk{border-left-color:var(--mat)} .entry.abort{border-left-color:var(--bad)}
+.entry.warm{border-left-color:var(--good)} .entry.wk{border-left-color:var(--mat)} .entry.abort{border-left-color:var(--bad)} .entry.test{border-left-color:var(--good)} .entry.status{opacity:.75}
+.okbox{border:2px solid var(--good);background:var(--good-soft);border-radius:14px;padding:12px 14px;font-weight:700}
 .entry time{font-weight:800;font-variant-numeric:tabular-nums;color:var(--muted)}
 .entry .what{text-transform:uppercase;letter-spacing:.08em;font-weight:800;font-size:.82rem}
 .entry .body{grid-column:2;min-width:0;overflow-wrap:anywhere;white-space:pre-line}
@@ -172,10 +173,12 @@ function render() {
 
   // Verlauf
   let feed = "", lastDay = "";
-  P.slice(0, 100).forEach(e => {
+  const FEED = ALL.filter(e => e.kind !== "other");
+  const lastTest = ALL.find(e => e.kind === "test");
+  FEED.slice(0, 120).forEach(e => {
     const d = new Date(e.time * 1000), dk = dayKey(d);
     if (dk !== lastDay) { feed += `<div class="day">${esc(dayLabel(d))}</div>`; lastDay = dk; }
-    const label = e.kind === "kuer" ? `${MEDAL_NAME[e.medal]} · ${e.mode || "Übung"}` : KIND[e.kind];
+    const label = e.kind === "kuer" ? `${MEDAL_NAME[e.medal]} · ${e.mode || "Übung"}` : e.kind === "status" ? "App geöffnet" : KIND[e.kind];
     feed += `<div class="entry ${e.kind === "kuer" ? e.medal : e.kind}"><time datetime="${d.toISOString()}">${hm(d)}</time><span class="what">${esc(label)}</span>
       <span class="body">${esc(e.body)}</span>
       ${e.stars != null ? `<span class="score">Stand danach: ${e.stars} Sterne · ${e.g + e.s + e.b} Medaillen · ${e.cards} Karten</span>` : ""}</div>`;
@@ -197,16 +200,18 @@ function render() {
       <button class="btn small" data-act="refresh" ${st.loading ? "disabled" : ""}>${st.loading ? "Lädt …" : "Aktualisieren"}</button>
     </div>
     ${st.error ? `<p class="err">${esc(st.error)}</p>` : ""}
-    ${!P.length && !latest ? `<div class="empty"><h3>Noch nichts da</h3><p class="muted">Sobald Emma eine Übung beendet, erscheint sie hier. Damit das klappt, muss in Emmas Lernapp unter Pokalvitrine → Eltern-Benachrichtigung derselbe Code eingetragen sein. Am einfachsten öffnest du auf Emmas Gerät den Link unten bei „Einstellungen“.</p></div>` : ""}
+    ${lastTest ? `<p class="okbox">Verbindung funktioniert. Letzte Test-Nachricht von Emmas Gerät: ${dayLabel(new Date(lastTest.time * 1000))}, ${hm(new Date(lastTest.time * 1000))} Uhr.</p>` : ""}
+    ${!FEED.length ? `<div class="empty"><h3>Noch nichts da</h3><p class="muted">Sobald Emma eine Übung beendet, erscheint sie hier. Damit das klappt, muss in Emmas Lernapp unter Pokalvitrine → Eltern-Benachrichtigung derselbe Code eingetragen sein. Am einfachsten öffnest du auf Emmas Gerät den Link unten bei „Einstellungen“.</p></div>` : ""}
     ${words.length ? `<section class="panel"><h2>Diese Wörter fallen Emma schwer</h2><p class="note">Gezählt, wie oft Emma das Wort falsch hatte (aus allen gespeicherten Übungen).</p>
       <div class="words">${words.map(([w, n]) => `<span class="word">${esc(w)}<b>${n}×</b></span>`).join("")}</div></section>` : ""}
     ${subjBlocks}
-    ${P.length ? `<h2>Verlauf</h2><div class="feed">${feed}</div>` : ""}
+    ${FEED.length ? `<h2>Verlauf</h2><div class="feed">${feed}</div>` : ""}
     <p class="note">Gratis-Dienst ntfy.sh: Neue Meldungen sind dort etwa 12 Stunden abrufbar. Was diese Seite einmal geladen hat, bleibt auf deinem Handy gespeichert. Öffne die Elternansicht also am besten einmal am Tag. Mit der App „ntfy“ (Kanal = Eltern-Code) bekommst du zusätzlich Push-Meldungen.</p>
     <h2>Einstellungen</h2>
     <div class="panel">
       <b>Link für Emmas Gerät</b>
       <p class="note">Einmal auf Emmas Handy oder Tablet öffnen. Dann ist der Eltern-Code in ihrer Lernapp eingetragen und gesperrt.</p>
+      <p class="note">Kontrolle: In Emmas Lernapp unter Pokalvitrine muss stehen: <b>Code endet auf „…${esc(code.slice(-4))}“</b>.</p>
       <div class="copyrow"><code id="kidlink">${esc(kidLink())}</code><button class="btn small" data-act="copy">${st.copied ? "Kopiert" : "Kopieren"}</button></div>
     </div>
     <div class="row" style="align-items:flex-end"><label for="f-code" style="flex:1;min-width:200px">Eltern-Code<input id="f-code" value="${esc(code)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label><button class="btn" data-act="savecode">Speichern</button></div>

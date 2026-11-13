@@ -662,7 +662,7 @@ function renderVitrine() {
       <div class="row" style="align-items:flex-end"><label for="f-ntfy" style="flex:1;min-width:200px">Neuer Eltern-Code<input id="f-ntfy" value="${esc(ntfyTopic())}" autocomplete="off" autocapitalize="off" spellcheck="false"></label><button class="btn" data-act="saventfy">Speichern</button></div>
       <div class="row"><span class="chip ok">Entsperrt</span><button class="btn small danger" data-act="offntfy">Ausschalten</button><button class="btn small ghost" data-act="lockntfy">Wieder sperren</button></div>`
     : `
-      <div class="row"><span class="chip ok">Aktiv · gesperrt</span><button class="btn small ghost" data-act="testntfy">Test-Nachricht senden</button></div>
+      <div class="row"><span class="chip ok">Aktiv · gesperrt</span><span class="muted">Code endet auf „…${esc(ntfyTopic().slice(-4))}“</span><button class="btn small ghost" data-act="testntfy">Test-Nachricht senden</button></div>
       <p class="muted">Ändern oder ausschalten können nur Mama oder Papa mit dem Eltern-Code.</p>
       <div class="row" style="align-items:flex-end"><label for="f-unlock" style="flex:1;min-width:200px">Eltern-Code zum Entsperren<input id="f-unlock" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></label><button class="btn" data-act="unlockntfy">Entsperren</button></div>`}
     <p id="ntfy-msg" class="muted"></p>
