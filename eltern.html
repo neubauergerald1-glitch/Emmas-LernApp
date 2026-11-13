@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Emma Eltern</title>
+<meta name="theme-color" content="#2b1527">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Emma Eltern">
+<link rel="icon" type="image/svg+xml" href="icons/eltern.svg">
+<link rel="apple-touch-icon" href="icons/eltern-touch.png">
+<link rel="manifest" href="eltern.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+.today{display:flex;gap:8px;flex-wrap:wrap}
+.topics{display:flex;flex-direction:column;gap:8px}
+.topic{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.topic > span:first-child{font-weight:700;min-width:0}
+.day{text-transform:uppercase;letter-spacing:.12em;font-size:.8rem;color:var(--berry);font-weight:800;margin-top:6px}
+.feed{display:flex;flex-direction:column;gap:8px}
+.entry{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);border-radius:12px;padding:10px 14px;display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline}
+.entry.gold{border-left-color:var(--gold)} .entry.silber{border-left-color:var(--silver)} .entry.bronze{border-left-color:var(--bronze)}
+.entry.warm{border-left-color:var(--good)} .entry.wk{border-left-color:var(--mat)} .entry.abort{border-left-color:var(--bad)}
+.entry time{font-weight:800;font-variant-numeric:tabular-nums;color:var(--muted)}
+.entry .what{text-transform:uppercase;letter-spacing:.08em;font-weight:800;font-size:.82rem}
+.entry .body{grid-column:2;min-width:0;overflow-wrap:anywhere;white-space:pre-line}
+.entry .score{grid-column:2;color:var(--muted);font-size:.9rem}
+.words{display:flex;flex-wrap:wrap;gap:8px}
+.word{border:2px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:800;background:var(--surface)}
+.word b{color:var(--bad);margin-left:6px;font-variant-numeric:tabular-nums}
+.note{font-size:.9rem;color:var(--muted);max-width:65ch}
+.copyrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.copyrow code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--surface-2);padding:6px 10px;border-radius:10px;overflow-wrap:anywhere;min-width:0;flex:1}
+</style>
+</head>
+<body>
+<main class="wrap" id="app" aria-live="polite"></main>
+<script src="content.js"></script>
+<script>
+/* Elternansicht: liest Emmas Meldungen vom ntfy-Kanal (Eltern-Code) und speichert sie auf diesem Handy. */
+const CODE_KEY = "emma_parent_code", HIST_KEY = "emma_parent_hist";
+const RE = /^[A-Za-z0-9_-]{8,64}$/;
+const $ = s => document.querySelector(s);
+const app = $("#app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const BUILT = window.BUILTIN || [];
+
+let code = lsGet(CODE_KEY, null);
+try {
+  const u = new URL(location.href), c = u.searchParams.get("code");
+  if (c && RE.test(c)) { code = c; lsSet(CODE_KEY, c); u.searchParams.delete("code"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+} catch {}
+let hist = lsGet(HIST_KEY, []);
+const st = { loading: false, error: "", last: null, confirmClear: false, msg: "", copied: false };
+
+const MEDAL = { "1st_place_medal": "gold", "2nd_place_medal": "silber", "3rd_place_medal": "bronze" };
+const MEDAL_NAME = { gold: "Gold", silber: "Silber", bronze: "Bronze" };
+const RANK = { bronze: 1, silber: 2, gold: 3 };
+const KIND = { status: "Stand", kuer: "Übung", warm: "Aufwärmen", wk: "Wettkampf-Runde", abort: "Abgebrochen", test: "Test", other: "Nachricht" };
+
+function parse(h) {
+  const m = h.message || "", t = h.tags || [];
+  const stand = m.match(/Sterne: (\d+) · Medaillen: (\d+)\/(\d+)\/(\d+) · Karten gekonnt: (\d+)/);
+  const body = m.replace(/\n?Sterne: \d+ · Medaillen: .*$/, "").trim();
+  const medal = t.map(x => MEDAL[x]).find(Boolean) || null;
+  const kind = medal ? "kuer" : t.includes("books") ? "warm" : t.includes("stopwatch") ? "wk" : t.includes("warning") || t.includes("no_bell") ? "abort" : t.includes("bar_chart") ? "status" : t.includes("white_check_mark") ? "test" : "other";
+  let subj = null, topic = null, mode = null, mm;
+  if ((mm = body.match(/^(.+?) · (.+?) \((Schreiben|Turnen|Aufwärmen|Wettkampf)\)/))) { subj = mm[1]; topic = mm[2]; mode = mm[3]; }
+  else if ((mm = body.match(/^(.+?) \(Wettkampf-Runde\)/))) { subj = mm[1]; mode = "Wettkampf"; }
+  const sc = body.match(/Wertung (\d+,\d)/);
+  const fm = body.match(/^Falsch: (.+)$/m);
+  return Object.assign({}, h, { body, kind, medal, subj, topic, mode, score: sc ? sc[1] : null, wrong: fm ? fm[1].split(", ").filter(Boolean) : [],
+    stars: stand ? +stand[1] : null, g: stand ? +stand[2] : 0, s: stand ? +stand[3] : 0, b: stand ? +stand[4] : 0, cards: stand ? +stand[5] : null });
+}
+
+async function refresh() {
+  if (!code || st.loading) return;
+  st.loading = true; render();
+  try {
+    const r = await fetch(`https://ntfy.sh/${encodeURIComponent(code)}/json?poll=1&since=all`, { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    const msgs = (await r.text()).split("\n").filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(m => m && m.event === "message");
+    const byId = new Map(hist.map(h => [h.id, h]));
+    msgs.forEach(m => byId.set(m.id, { id: m.id, time: m.time, title: m.title || "", message: m.message || "", tags: m.tags || [] }));
+    hist = [...byId.values()].sort((a, b) => b.time - a.time).slice(0, 600);
+    lsSet(HIST_KEY, hist);
+    st.error = ""; st.last = Date.now();
+  } catch (e) {
+    st.error = "Neue Übungen konnten nicht geladen werden. Bist du online? Unten siehst du den zuletzt gespeicherten Stand.";
+  }
+  st.loading = false; render();
+}
+
+const dayKey = d => d.toDateString();
+function dayLabel(d) {
+  const t = new Date(), y = new Date(); y.setDate(t.getDate() - 1);
+  if (dayKey(d) === dayKey(t)) return "Heute";
+  if (dayKey(d) === dayKey(y)) return "Gestern";
+  return d.toLocaleDateString("de-AT", { weekday: "long", day: "numeric", month: "numeric" });
+}
+const hm = d => d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
+function ago(ms) {
+  const min = Math.round((Date.now() - ms) / 60000);
+  if (min < 1) return "gerade eben";
+  if (min < 60) return `vor ${min} Min.`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `vor ${h} Std.`;
+  const days = Math.round(h / 24);
+  return days === 1 ? "vor 1 Tag" : `vor ${days} Tagen`;
+}
+function countdown(test) {
+  if (!test) return "";
+  const t = new Date(test + "T00:00:00"), n = new Date(); n.setHours(0, 0, 0, 0);
+  const d = Math.round((t - n) / 864e5);
+  if (d < 0) return ""; if (d === 0) return "Heute ist Test"; if (d === 1) return "Morgen ist Test";
+  return `Noch ${d} Tage bis zum Test`;
+}
+const kidLink = () => new URL(`./?eltern=${encodeURIComponent(code)}`, location.href).href;
+
+function renderSetup() {
+  app.innerHTML = `<section class="board"><div class="who"><small>Eltern-Ansicht</small>Emmas Lernstand</div></section>
+    <h1>Eltern-Code eingeben</h1>
+    <p class="note">Denk dir einen Code aus (8 bis 64 Zeichen, Buchstaben, Zahlen, - und _), zum Beispiel <b>emma-turnhalle-4821</b>. Derselbe Code kommt danach in Emmas Lernapp. Dann siehst du hier, wann sie geübt hat und mit welchem Ergebnis.</p>
+    <div class="row" style="align-items:flex-end"><label for="f-code" style="flex:1;min-width:200px">Eltern-Code<input id="f-code" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="emma-turnhalle-…"></label><button class="btn primary" data-act="savecode">Weiter</button></div>
+    <p id="msg" class="err">${esc(st.msg)}</p>`;
+}
+
+function render() {
+  if (!code) return renderSetup();
+  const ALL = hist.map(parse);
+  const latest = ALL.find(e => e.stars != null);
+  const P = ALL.filter(e => ["kuer", "warm", "wk", "abort"].includes(e.kind));
+  const lastEx = P[0];
+  const now = new Date();
+  const today = P.filter(e => dayKey(new Date(e.time * 1000)) === dayKey(now));
+  const cnt = f => today.filter(f).length;
+
+  // Wörter, die schwerfallen
+  const wc = {};
+  P.forEach(e => e.wrong.forEach(w => { wc[w] = (wc[w] || 0) + 1; }));
+  const words = Object.entries(wc).sort((a, b) => b[1] - a[1]).slice(0, 24);
+
+  // Fächer & Übungen
+  const subjNames = [...new Set([...BUILT.map(s => s.name), ...P.map(e => e.subj).filter(Boolean)])];
+  const subjBlocks = subjNames.map(name => {
+    const b = BUILT.find(s => s.name === name);
+    const topicNames = [...new Set([...(b ? b.topics.map(t => t.name) : []), ...P.filter(e => e.subj === name && e.topic).map(e => e.topic)])];
+    if (!topicNames.length) return "";
+    const rows = topicNames.map(tn => {
+      const es = P.filter(e => e.subj === name && e.topic === tn);
+      const best = es.filter(e => e.medal).sort((x, y) => RANK[y.medal] - RANK[x.medal])[0];
+      const nW = es.filter(e => e.kind === "kuer" && e.mode === "Schreiben").length, nT = es.filter(e => e.kind === "kuer" && e.mode === "Turnen").length;
+      const warm = es.filter(e => e.kind === "warm").length;
+      const chips = (best ? `<span class="chip ${best.medal}">Beste: ${MEDAL_NAME[best.medal]}${best.score ? " · " + best.score : ""}</span>` : "")
+        + (nW ? `<span class="chip">${nW}× Schreiben</span>` : "") + (nT ? `<span class="chip">${nT}× Turnen</span>` : "")
+        + (warm ? `<span class="chip ok">${warm}× Aufwärmen</span>` : "") + (!es.length ? `<span class="chip">noch nicht geübt</span>` : "");
+      return `<div class="topic"><span>${esc(tn)}</span><span class="chips">${chips}</span></div>`;
+    }).join("");
+    const done = topicNames.filter(tn => P.some(e => e.subj === name && e.topic === tn && e.medal)).length;
+    const cd = b && countdown(b.test);
+    return `<section style="display:flex;flex-direction:column;gap:10px"><div class="spread"><h2>${esc(name)}</h2><span class="muted">${done}/${topicNames.length} Übungen mit Medaille${cd ? ` · <b>${cd}</b>` : ""}</span></div><div class="topics">${rows}</div></section>`;
+  }).join("");
+
+  // Verlauf
+  let feed = "", lastDay = "";
+  P.slice(0, 100).forEach(e => {
+    const d = new Date(e.time * 1000), dk = dayKey(d);
+    if (dk !== lastDay) { feed += `<div class="day">${esc(dayLabel(d))}</div>`; lastDay = dk; }
+    const label = e.kind === "kuer" ? `${MEDAL_NAME[e.medal]} · ${e.mode || "Übung"}` : KIND[e.kind];
+    feed += `<div class="entry ${e.kind === "kuer" ? e.medal : e.kind}"><time datetime="${d.toISOString()}">${hm(d)}</time><span class="what">${esc(label)}</span>
+      <span class="body">${esc(e.body)}</span>
+      ${e.stars != null ? `<span class="score">Stand danach: ${e.stars} Sterne · ${e.g + e.s + e.b} Medaillen · ${e.cards} Karten</span>` : ""}</div>`;
+  });
+
+  app.innerHTML = `
+    <section class="board" aria-label="Lernstand">
+      <div class="who"><small>Eltern-Ansicht</small>Emmas Lernstand</div>
+      <div class="digit">${latest ? latest.stars : "–"}<small>Sterne</small></div>
+      <div class="digit">${latest ? latest.g + latest.s + latest.b : "–"}<small>Medaillen</small></div>
+      <div class="ticker">${latest ? `Gold <b>${latest.g}</b> · Silber <b>${latest.s}</b> · Bronze <b>${latest.b}</b> · ${latest.cards} Karten gekonnt<br>` : ""}${lastEx ? `Letzte Übung <b>${ago(lastEx.time * 1000)}</b>` : "Noch keine Übung empfangen."}</div>
+    </section>
+    <div class="spread">
+      <div class="today"><span class="chip ${today.length ? "ok" : ""}">Heute: ${today.length} Übung${today.length === 1 ? "" : "en"}</span>
+        ${cnt(e => e.medal === "gold") ? `<span class="chip gold">${cnt(e => e.medal === "gold")}× Gold</span>` : ""}
+        ${cnt(e => e.mode === "Schreiben" && e.kind === "kuer") ? `<span class="chip">${cnt(e => e.mode === "Schreiben" && e.kind === "kuer")}× Schreiben</span>` : ""}
+        ${cnt(e => e.kind === "warm") ? `<span class="chip ok">${cnt(e => e.kind === "warm")}× Aufwärmen</span>` : ""}
+        ${cnt(e => e.kind === "abort") ? `<span class="chip" style="border-color:var(--bad);color:var(--bad)">${cnt(e => e.kind === "abort")}× abgebrochen</span>` : ""}</div>
+      <button class="btn small" data-act="refresh" ${st.loading ? "disabled" : ""}>${st.loading ? "Lädt …" : "Aktualisieren"}</button>
+    </div>
+    ${st.error ? `<p class="err">${esc(st.error)}</p>` : ""}
+    ${!P.length && !latest ? `<div class="empty"><h3>Noch nichts da</h3><p class="muted">Sobald Emma eine Übung beendet, erscheint sie hier. Damit das klappt, muss in Emmas Lernapp unter Pokalvitrine → Eltern-Benachrichtigung derselbe Code eingetragen sein. Am einfachsten öffnest du auf Emmas Gerät den Link unten bei „Einstellungen“.</p></div>` : ""}
+    ${words.length ? `<section class="panel"><h2>Diese Wörter fallen Emma schwer</h2><p class="note">Gezählt, wie oft Emma das Wort falsch hatte (aus allen gespeicherten Übungen).</p>
+      <div class="words">${words.map(([w, n]) => `<span class="word">${esc(w)}<b>${n}×</b></span>`).join("")}</div></section>` : ""}
+    ${subjBlocks}
+    ${P.length ? `<h2>Verlauf</h2><div class="feed">${feed}</div>` : ""}
+    <p class="note">Gratis-Dienst ntfy.sh: Neue Meldungen sind dort etwa 12 Stunden abrufbar. Was diese Seite einmal geladen hat, bleibt auf deinem Handy gespeichert. Öffne die Elternansicht also am besten einmal am Tag. Mit der App „ntfy“ (Kanal = Eltern-Code) bekommst du zusätzlich Push-Meldungen.</p>
+    <h2>Einstellungen</h2>
+    <div class="panel">
+      <b>Link für Emmas Gerät</b>
+      <p class="note">Einmal auf Emmas Handy oder Tablet öffnen. Dann ist der Eltern-Code in ihrer Lernapp eingetragen und gesperrt.</p>
+      <div class="copyrow"><code id="kidlink">${esc(kidLink())}</code><button class="btn small" data-act="copy">${st.copied ? "Kopiert" : "Kopieren"}</button></div>
+    </div>
+    <div class="row" style="align-items:flex-end"><label for="f-code" style="flex:1;min-width:200px">Eltern-Code<input id="f-code" value="${esc(code)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label><button class="btn" data-act="savecode">Speichern</button></div>
+    <p id="msg" class="err">${esc(st.msg)}</p>
+    ${st.confirmClear ? `<div class="confirm"><span>Gespeicherten Verlauf auf diesem Handy löschen? Emmas Sterne in der Lernapp bleiben erhalten.</span><div class="row"><button class="btn small ghost" data-act="nclear">Abbrechen</button><button class="btn small danger" data-act="clear">Ja, löschen</button></div></div>`
+      : `<div class="row"><button class="btn small danger" data-act="askclear">Verlauf löschen</button><a class="btn small ghost" href="./" style="text-decoration:none;color:inherit">Zur Lernapp</a></div>`}
+    ${st.last ? `<p class="sync">Zuletzt aktualisiert um ${hm(new Date(st.last))}</p>` : ""}`;
+}
+
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
+  const a = b.dataset.act;
+  if (a === "refresh") refresh();
+  if (a === "savecode") {
+    const v = $("#f-code").value.trim();
+    if (!RE.test(v)) { st.msg = "Der Code darf nur Buchstaben, Zahlen, - und _ enthalten (8–64 Zeichen)."; render(); return; }
+    if (v !== code) { hist = []; lsSet(HIST_KEY, hist); }
+    code = v; lsSet(CODE_KEY, v); st.msg = ""; render(); refresh();
+  }
+  if (a === "copy") {
+    const txt = kidLink();
+    const done = () => { st.copied = true; render(); setTimeout(() => { st.copied = false; render(); }, 2000); };
+    try { navigator.clipboard.writeText(txt).then(done, () => selectLink()); } catch { selectLink(); }
+  }
+  if (a === "askclear") { st.confirmClear = true; render(); }
+  if (a === "nclear") { st.confirmClear = false; render(); }
+  if (a === "clear") { hist = []; lsSet(HIST_KEY, hist); st.confirmClear = false; render(); }
+});
+function selectLink() { const el = $("#kidlink"); if (!el) return; const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "f-code") $('[data-act="savecode"]').click(); });
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
+setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60000);
+render(); refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "Emma Eltern",
+  "short_name": "Emma Eltern",
+  "start_url": "./eltern.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf6f8",
+  "theme_color": "#2b1527",
+  "icons": [
+    { "src": "icons/eltern-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/eltern-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
