@@ -4,7 +4,7 @@ Lern-App im Turn-Stil für Emma: Aufwärmen mit Karteikarten, Übungen am Schweb
 
 - **Lernapp:** `index.html` (zum Homescreen hinzufügen → „Turnhalle“)
 - **Eltern-App:** `eltern.html` (zum Homescreen hinzufügen → „Emma Eltern“)
-- **Fest eingebaute Fächer:** `content.js` (aktuell: Englisch – Vokabeltest Food 26.11.2026, Schularbeit 27.11.2026 mit Adverbs of frequency, Unit 5 als Wiederholung)
+- **Fest eingebaute Fächer:** `content.js` (aktuell: Englisch – Vokabeltest Food + Unit 7 26.11.2026, Schularbeit 27.11.2026 mit Adverbs of frequency, Unit 5 als Wiederholung)
 - Weitere Fächer lassen sich in der App über „+ Fach hinzufügen“ anlegen.
 - Fortschritt und eigene Fächer werden im Browser von Emmas Gerät gespeichert.
 

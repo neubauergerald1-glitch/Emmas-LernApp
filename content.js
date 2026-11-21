@@ -14,7 +14,7 @@ window.BUILTIN = [
   "builtin": true,
   "tests": [
    {
-    "name": "Vokabeltest Food",
+    "name": "Vokabeltest",
     "date": "2026-11-26",
     "sections": [
      "food"
@@ -33,8 +33,8 @@ window.BUILTIN = [
   "sections": [
    {
     "id": "food",
-    "name": "Vokabeltest Food",
-    "note": "Donnerstag, 26.11. · alle Wörter aus dem Food-Bild"
+    "name": "Vokabeltest: Food + Unit 7",
+    "note": "Donnerstag, 26.11. · das Food-Bild und die Unit-7-Seite „MORE Words and Phrases“"
    },
    {
     "id": "gram",
@@ -246,6 +246,147 @@ window.BUILTIN = [
       "q": "Nüsse",
       "a": "nuts",
       "ex": "Squirrels eat [nuts]."
+     }
+    ]
+   },
+   {
+    "id": "unit7-a",
+    "name": "Unit 7: Essen & Familie",
+    "section": "food",
+    "cards": [
+     {
+      "q": "Fleisch",
+      "a": "meat",
+      "ex": "I am vegetarian: I never eat [meat]."
+     },
+     {
+      "q": "Schinken",
+      "a": "ham",
+      "ex": "On the weekend, I sometimes have [ham] and eggs for breakfast."
+     },
+     {
+      "q": "gesund",
+      "a": "healthy",
+      "ex": "A lot of junk food isn't [healthy]."
+     },
+     {
+      "q": "mögen",
+      "a": "to like",
+      "ex": "I [like] orange juice."
+     },
+     {
+      "q": "Das ist nett.",
+      "a": "That's nice."
+     },
+     {
+      "q": "Frühstück",
+      "a": "breakfast",
+      "ex": "We have eggs for [breakfast]."
+     },
+     {
+      "q": "Land (nicht Stadt)",
+      "a": "country",
+      "ex": "My grandparents live in the [country], but I live in the city."
+     },
+     {
+      "q": "Nachtisch",
+      "a": "dessert",
+      "ex": "For [dessert], I like rice pudding."
+     },
+     {
+      "q": "Familie",
+      "a": "family",
+      "ex": "My [family] and I live in Austria."
+     },
+     {
+      "q": "Obst; Frucht",
+      "a": "fruit",
+      "ex": "He likes lots of [fruit] for breakfast."
+     },
+     {
+      "q": "Großeltern",
+      "a": "grandparents",
+      "ex": "My [grandparents] live in the country."
+     },
+     {
+      "q": "Mittagessen",
+      "a": "lunch",
+      "ex": "We often have curry for [lunch]."
+     },
+     {
+      "q": "Eintopf",
+      "a": "stew",
+      "ex": "When we have vegetables (and meat) at home, my mum cooks a [stew]."
+     }
+    ]
+   },
+   {
+    "id": "unit7-b",
+    "name": "Unit 7: Wie oft? & Sätze",
+    "section": "food",
+    "cards": [
+     {
+      "q": "immer",
+      "a": "always",
+      "ex": "They [always] have pizza for dinner."
+     },
+     {
+      "q": "nie, niemals",
+      "a": "never",
+      "ex": "She [never] eats meat. She's a vegetarian."
+     },
+     {
+      "q": "oft, häufig",
+      "a": "often",
+      "ex": "They [often] have bread for breakfast."
+     },
+     {
+      "q": "manchmal",
+      "a": "sometimes",
+      "ex": "We [sometimes] have fish for lunch."
+     },
+     {
+      "q": "gewöhnlich, normalerweise",
+      "a": "usually",
+      "ex": "She [usually] has bread for breakfast."
+     },
+     {
+      "q": "setzen, legen, stellen",
+      "a": "to put",
+      "ex": "We [put] fish and vegetables on the rice paper."
+     },
+     {
+      "q": "Gemüse",
+      "a": "vegetables / veggies",
+      "ex": "I like [veggies], I mean vegetables."
+     },
+     {
+      "q": "bester Freund / beste Freundin",
+      "a": "best friend",
+      "ex": "I like John best. He's my [best friend]."
+     },
+     {
+      "q": "Tofu",
+      "a": "tofu",
+      "ex": "I like meat, but sometimes I also eat [tofu]."
+     },
+     {
+      "q": "Rindfleisch",
+      "a": "beef",
+      "ex": "I often eat chicken, but I really don't like [beef]."
+     },
+     {
+      "q": "Ich weiß es nicht.",
+      "a": "I don't know."
+     },
+     {
+      "q": "Ich bin mir nicht sicher.",
+      "a": "I'm not sure. / I am not sure."
+     },
+     {
+      "q": "Geschenk",
+      "a": "present",
+      "ex": "The vase is a good [present] for Mum."
      }
     ]
    },
