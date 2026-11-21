@@ -167,7 +167,8 @@ function render() {
       return `<div class="topic"><span>${esc(tn)}</span><span class="chips">${chips}</span></div>`;
     }).join("");
     const done = topicNames.filter(tn => P.some(e => e.subj === name && e.topic === tn && e.medal)).length;
-    const cd = b && countdown(b.test);
+    const nt = b && (b.tests || (b.test ? [{ name: "Test", date: b.test }] : [])).filter(t => countdown(t.date)).sort((x, y) => x.date.localeCompare(y.date))[0];
+    const cd = nt ? `${nt.name}: ${countdown(nt.date)}` : "";
     return `<section style="display:flex;flex-direction:column;gap:10px"><div class="spread"><h2>${esc(name)}</h2><span class="muted">${done}/${topicNames.length} Übungen mit Medaille${cd ? ` · <b>${cd}</b>` : ""}</span></div><div class="topics">${rows}</div></section>`;
   }).join("");
 

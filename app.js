@@ -77,8 +77,12 @@ function gapItem(c) {
 }
 function pool(subj, topic, kind) {
   const tag = q => Object.assign(q, { key: tKey(subj, topic) + "|" + hash(q.q), tname: topic.name });
-  if (topic.quiz && topic.quiz.length) return topic.quiz.map(q => tag(Object.assign({}, q)));
-  const all = subj.topics.flatMap(t => (t.cards || []).map(c => c.a));
+  if (topic.quiz && topic.quiz.length) {
+    const qs = topic.quiz.map(q => tag(Object.assign({}, q)));
+    if (kind === "write") { const w = qs.filter(q => q.type === "write"); return w.length ? w : qs; }
+    return qs;
+  }
+  const all = subj.topics.filter(t => !(t.quiz && t.quiz.length) && (t.section || "") === (topic.section || "")).flatMap(t => (t.cards || []).map(c => c.a));
   const sets = (topic.cards || []).map(c => {
     const wrong = (c.wrong && c.wrong.length) ? c.wrong.slice(0, 3) : shuffle([...new Set(all.filter(a => a !== c.a))]).slice(0, 3);
     const mc = wrong.length ? { type: "mc", q: c.q, options: [c.a, ...wrong], correct: 0 } : { type: "self", q: c.q, a: c.a };
@@ -114,7 +118,7 @@ function lev(a, b) {
 function checkWrite(val, a) {
   const n = normW(val), vs = variantsW(a);
   if (vs.includes(n)) return { ok: true };
-  if (vs.some(v => v.startsWith("to ") && v.slice(3) === n)) return { ok: true, noTo: true };
+  if (vs.some(v => ["to ", "a ", "an "].some(p => v.startsWith(p) && v.slice(p.length) === n))) return { ok: true, noTo: true };
   return { ok: false, near: vs.some(v => v.length >= 4 && (lev(n, v) === 1 || (v.startsWith("to ") && lev(n, v.slice(3)) === 1))) };
 }
 const hintText = a => String(a).split(/\s*[\/;]\s*/)[0].replace(/[()]/g, "").split(" ").map(w => w.split("").map((ch, i) => i === 0 || /[^a-zäöüß]/i.test(ch) ? ch : "_").join(" ")).join("   ");
@@ -168,13 +172,18 @@ function countdown(test) {
   if (d === 1) return "Morgen ist Test!";
   return `Noch ${d} Tage bis zum Test`;
 }
+/* Ein Fach kann mehrere Überprüfungen haben: s.tests = [{name, date, sections}] (alt: s.test) */
+const testsOf = s => (s.tests && s.tests.length) ? s.tests : (s.test ? [{ name: "Test", date: s.test }] : []);
+const upcomingTests = s => testsOf(s).filter(t => daysTo(t.date) != null && daysTo(t.date) >= 0).sort((a, b) => a.date.localeCompare(b.date));
+const nextTest = s => upcomingTests(s)[0] || null;
+const testLine = (s, t) => `<b>${esc(s.name)} · ${esc(t.name)}</b> · ${countdown(t.date)} (${fmtDate(t.date)})`;
 const fmtDate = s => { if (!s) return ""; const [y, m, d] = s.split("-"); return `${+d}.${+m}.${y}`; };
 const fmtTs = ts => { const d = new Date(ts); return d.toLocaleDateString("de-AT", { weekday: "short", day: "numeric", month: "numeric" }) + ", " + d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" }); };
 const medalCount = () => (S.medals.gold || 0) + (S.medals.silber || 0) + (S.medals.bronze || 0);
 
 function board(extra) {
-  const next = subjects().filter(s => countdown(s.test)).sort((a, b) => a.test.localeCompare(b.test))[0];
-  const tick = extra || (next ? `<b>${esc(next.name)}</b> · ${countdown(next.test)} (${fmtDate(next.test)})` : "Such dir ein Fach aus und turn deine erste Übung.");
+  const next = subjects().map(s => ({ s, t: nextTest(s) })).filter(x => x.t).sort((a, b) => a.t.date.localeCompare(b.t.date))[0];
+  const tick = extra || (next ? testLine(next.s, next.t) : "Such dir ein Fach aus und turn deine erste Übung.");
   return `<section class="board" aria-label="Wertungstafel">
     <div class="who"><small>Turnerin</small>${esc(S.player)}</div>
     <div class="digit">${S.stars}<small>Sterne</small></div>
@@ -231,7 +240,7 @@ function renderHome() {
     const p = subjProgress(s);
     const pct = p.cards ? Math.round(p.known / p.cards * 100) : 0;
     return `<button class="subj" data-act="subject" data-s="${esc(s.id)}">
-      <span class="eyebrow">${s.test ? "Test am " + fmtDate(s.test) : "Fach"}</span>
+      <span class="eyebrow">${upcomingTests(s).length ? upcomingTests(s).map(t => `${esc(t.name)} ${fmtDate(t.date).replace(/\d{4}$/, "")}`).join(" · ") : "Fach"}</span>
       <h2>${esc(s.name)}</h2>
       <span class="medals" aria-label="${p.done} von ${p.topics} Übungen mit Medaille">${p.medals.map(m => `<i class="m ${m}"></i>`).join("")}</span>
       <span class="meta">${p.topics} Übung${p.topics === 1 ? "" : "en"} · ${p.done} mit Medaille</span>
@@ -249,41 +258,58 @@ function renderHome() {
     <div class="foot"><p class="sync">${esc(syncLabel)}</p><a class="linkbtn" href="eltern.html">Für Eltern</a></div>`;
 }
 
+function topicRow(s, t, i) {
+  const st = S.topics[tKey(s, t)] || {};
+  const known = (t.cards || []).filter((_, k) => S.cards[tKey(s, t) + "|" + k]).length;
+  const nq = pool(s, t).length, nw = pool(s, t, "write").filter(q => q.type === "write").length;
+  return `<div class="play">
+    <span class="no">${i + 1}</span>
+    <div class="info"><h3>${esc(t.name)}</h3>
+      <div class="chips">
+        ${(t.cards || []).length ? `<span class="chip ${known && known === (t.cards || []).length ? "ok" : ""}">Karten ${known}/${(t.cards || []).length}</span>` : ""}
+        <span class="chip">${nq} Fragen</span>
+        ${st.medal ? `<span class="chip ${st.medal}">${MEDAL_NAME[st.medal]} · ${de(st.best || 0)}</span>` : ""}
+        ${st.perfect ? `<span class="chip gold">Perfekte 10</span>` : ""}
+      </div></div>
+    <div class="actions">
+      ${(t.cards || []).length ? `<button class="btn small" data-act="warm" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Aufwärmen</button>` : ""}
+      ${s.write && nw ? `<button class="btn small mat" data-act="kuer" data-k="write" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Schreiben</button>` : ""}
+      ${nq ? `<button class="btn small primary" data-act="kuer" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Turnen</button>` : ""}
+    </div></div>`;
+}
+const sectionTopics = (s, ids) => s.topics.filter(t => ids.includes(t.section));
 function renderSubject() {
   const s = getSubj(view.s); if (!s) return go("home");
-  const p = subjProgress(s);
-  const rows = s.topics.map((t, i) => {
-    const st = S.topics[tKey(s, t)] || {};
-    const known = (t.cards || []).filter((_, k) => S.cards[tKey(s, t) + "|" + k]).length;
-    const nq = pool(s, t).length;
-    return `<div class="play">
-      <span class="no">${i + 1}</span>
-      <div class="info"><h3>${esc(t.name)}</h3>
-        <div class="chips">
-          <span class="chip ${known && known === (t.cards || []).length ? "ok" : ""}">Karten ${known}/${(t.cards || []).length}</span>
-          <span class="chip">${nq} Fragen</span>
-          ${st.medal ? `<span class="chip ${st.medal}">${MEDAL_NAME[st.medal]} · ${de(st.best || 0)}</span>` : ""}
-          ${st.perfect ? `<span class="chip gold">Perfekte 10</span>` : ""}
-        </div></div>
-      <div class="actions">
-        ${(t.cards || []).length ? `<button class="btn small" data-act="warm" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Aufwärmen</button>` : ""}
-        ${s.write && nq ? `<button class="btn small mat" data-act="kuer" data-k="write" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Schreiben</button>` : ""}
-        ${nq ? `<button class="btn small primary" data-act="kuer" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Turnen</button>` : ""}
-      </div></div>`;
+  const p = subjProgress(s), nt = nextTest(s);
+  const secs = (s.sections && s.sections.length) ? s.sections : [{ id: null, name: "" }];
+  let n = 0;
+  const blocks = secs.map(sec => {
+    const ts = sec.id ? s.topics.filter(t => t.section === sec.id) : s.topics;
+    if (!ts.length) return "";
+    const head = sec.name ? `<div class="sechead"><h2>${esc(sec.name)}</h2>${sec.note ? `<p class="muted">${esc(sec.note)}</p>` : ""}</div>` : "";
+    return `${head}<div class="plays">${ts.map(t => topicRow(s, t, n++)).join("")}</div>`;
   }).join("");
-  app.innerHTML = `${board(s.test && countdown(s.test) ? `<b>${esc(s.name)}</b> · ${countdown(s.test)} (${fmtDate(s.test)})` : `<b>${esc(s.name)}</b> · ${p.done}/${p.topics} Übungen mit Medaille`)}
+  // Generalprobe: je kommende Überprüfung, sonst für das ganze Fach
+  const probes = (upcomingTests(s).filter(t => t.sections).length ? upcomingTests(s).filter(t => t.sections) : [{ name: "", sections: null }])
+    .map((t, k) => {
+      const ts = t.sections ? sectionTopics(s, t.sections) : s.topics;
+      if (ts.flatMap(x => pool(s, x)).length < 4) return "";
+      return `<section class="wk">
+        <div><span class="eyebrow">Generalprobe${t.name ? " · " + esc(t.name) + " am " + fmtDate(t.date) : ""}</span><h2>Wettkampf-Runde</h2>
+        <p>2 Minuten, Fragen aus ${t.sections ? ts.length + " Übungen" : "allen Übungen"} gemischt. 10 richtige Antworten sind eine ganze Übung.</p></div>
+        <button class="btn" data-act="wk" data-s="${esc(s.id)}" data-sec="${t.sections ? esc(t.sections.join(",")) : ""}">Los geht's!</button>
+      </section>`;
+    }).join("");
+  app.innerHTML = `${board(nt ? testLine(s, nt) : `<b>${esc(s.name)}</b> · ${p.done}/${p.topics} Übungen mit Medaille`)}
     <button class="back" data-act="home">← Alle Fächer</button>
     <div class="spread"><h1>${esc(s.name)}</h1>
       ${s.builtin ? "" : `<div class="row"><button class="btn small ghost" data-act="edit" data-s="${esc(s.id)}">Bearbeiten</button><button class="btn small danger" data-act="askdel">Löschen</button></div>`}
     </div>
     ${view.confirmDel ? `<div class="confirm"><span>„${esc(s.name)}“ wirklich löschen? Medaillen und Sterne bleiben.</span><div class="row"><button class="btn small ghost" data-act="canceldel">Abbrechen</button><button class="btn small danger" data-act="del" data-s="${esc(s.id)}">Ja, löschen</button></div></div>` : ""}
-    <p class="muted"><b>Aufwärmen</b> = Karteikarten lernen.${s.write ? ` <b>Schreiben</b> = jedes Wort selbst eintippen, auch in Lückensätzen.` : ""} <b>Turnen</b> = Quiz am Schwebebalken${s.write ? " (gemischt: auswählen und schreiben)" : ""}: Jede richtige Antwort ist ein Element, du turnst ein Stück weiter. Am Ende landest du auf der Matte und die Kampfrichterinnen geben dir eine Wertung.</p>
-    <div class="plays">${rows}</div>
-    ${subjectPool(s).length >= 4 ? `<section class="wk">
-      <div><span class="eyebrow">Generalprobe</span><h2>Wettkampf-Runde</h2>
-      <p>2 Minuten, Fragen aus allen Übungen gemischt. 10 richtige Antworten sind eine ganze Übung. Wie viele schaffst du?</p></div>
-      <button class="btn" data-act="wk" data-s="${esc(s.id)}">Los geht's!</button>
-    </section>` : ""}`;
+    ${upcomingTests(s).length > 1 ? `<div class="tests">${upcomingTests(s).map(t => `<div class="testcard"><span class="eyebrow">${fmtDate(t.date)}</span><b>${esc(t.name)}</b><span class="muted">${countdown(t.date)}</span></div>`).join("")}</div>` : ""}
+    <p class="muted"><b>Aufwärmen</b> = Karteikarten lernen.${s.write ? ` <b>Schreiben</b> = jedes Wort oder jeden Satz selbst eintippen.` : ""} <b>Turnen</b> = Quiz am Schwebebalken${s.write ? " (gemischt: auswählen und schreiben)" : ""}: Jede richtige Antwort ist ein Element. Am Ende landest du auf der Matte und die Kampfrichterinnen geben dir eine Wertung.</p>
+    ${probes}
+    ${blocks}`;
 }
 
 /* ---------- Aufwärmen (Karteikarten) ---------- */
@@ -340,9 +366,10 @@ function startKuer(sid, tid, kind) {
   D = { mode: "kuer", kind: kind || "mix", s, t, queue: qs, total: qs.length, prog: 0, prev: 0, wobbles: 0, streak: 0, correct: 0, fb: null, cur: null, anim: null, phase: "play", missed: [] };
   nextQ(); go("kuer"); focusWrite();
 }
-function startWK(sid) {
+function startWK(sid, secs) {
   const s = getSubj(sid);
-  D = { mode: "wk", s, t: null, src: shuffle(subjectPool(s)), queue: [], prog: 0, prev: 0, wobbles: 0, streak: 0, correct: 0, kCount: 0, time: 120, fb: null, cur: null, anim: null, phase: "play", missed: [] };
+  const ts = secs && secs.length ? sectionTopics(s, secs) : s.topics;
+  D = { mode: "wk", s, t: null, secs, src: shuffle(ts.flatMap(t => pool(s, t))), queue: [], prog: 0, prev: 0, wobbles: 0, streak: 0, correct: 0, kCount: 0, time: 120, fb: null, cur: null, anim: null, phase: "play", missed: [] };
   D.queue = D.src.slice();
   nextQ(); go("kuer");
   D.timer = setInterval(tick, 1000);
@@ -385,7 +412,7 @@ function answer(ok, solution) {
     D.prog = D.mode === "wk" ? D.prog + 0.1 : D.correct / D.total;
     D.anim = "hop";
     D.fb = { ok: true, call: D.streak >= 3 ? pick(ELEMENTS_BIG) : pick(ELEMENTS), text: D.streak >= 3 ? `${D.streak} richtige in Folge!` : "", explain: item.explain };
-    if (item.type === "write") { S.written = (S.written || 0) + 1; if (D.cur.noTo) D.fb.text = `Richtig! Im Test schreibst du am besten „${item.a}“ – mit „to“.`; }
+    if (item.type === "write") { S.written = (S.written || 0) + 1; if (D.cur.noTo) D.fb.text = `Richtig! Im Test schreibst du am besten „${item.a.split(" / ")[0]}“ – mit „${item.a.split(" ")[0]}“.`; }
   } else {
     D.wobbles++; D.streak = 0; D.anim = "wobble"; D.missed.push(solution);
     if (D.mode === "kuer") D.queue.push(item); // Frage kommt später nochmal
@@ -445,13 +472,14 @@ function endWK() {
 
 function questionHTML() {
   const { item, opts } = D.cur, done = D.cur.done;
-  const tag = item.type === "write" ? (item.gap ? "Lückensatz · Schreib das fehlende Wort" : "Schreibsprung · Tippe das englische Wort")
+  const tag = item.type === "write" ? (item.gap ? "Lückensatz · Schreib das fehlende Wort" : item.ask ? (/nur dieses Wort/.test(item.ask) ? "Verbform-Sprung · Schreib das richtige Wort" : "Satz-Sprung · Schreib den ganzen Satz") : "Schreibsprung · Tippe das englische Wort")
     : { mc: "Element · Wähle die richtige Antwort", tf: "Sprung · Stimmt das?", order: "Choreografie · Tippe in der richtigen Reihenfolge", self: "Selbstcheck" }[item.type];
   let body = "", qtext = `<p class="q">${esc(item.q)}</p>`;
   if (item.type === "write") {
     const c = D.cur;
     qtext = item.gap
       ? `<p class="q">${esc(item.sentence).replace("\u0000", `<span class="gap">${done ? esc(item.a) : "&nbsp;"}</span>`)}</p><p class="muted">Deutsch: <b>${esc(item.prompt)}</b></p>`
+      : item.ask ? `<p class="q">${esc(item.ask)}</p><p class="sent">${esc(item.prompt)}</p>`
       : `<p class="q">Wie heißt das auf Englisch?</p><p class="vocab">${esc(item.prompt)}</p>`;
     body = `<form id="wform" class="wform">
       <label for="w-in" class="sr">Deine Antwort</label>
@@ -522,7 +550,7 @@ function renderKuer() {
       <h1>${d.kCount ? (d.kCount === 1 ? "1 Übung geschafft!" : d.kCount + " Übungen geschafft!") : "Zeit um!"}</h1>
       <div class="statgrid"><div class="stat"><b>${d.correct}</b><span>Richtig</span></div><div class="stat"><b>${d.wobbles}</b><span>Wackler</span></div><div class="stat"><b>${d.kCount * 6 + d.correct}</b><span>Sterne</span></div><div class="stat"><b>${S.wkBest}</b><span>Rekord</span></div></div>
       ${badgeNote(d.newBadges)}
-      <div class="row" style="justify-content:center"><button class="btn primary" data-act="wk" data-s="${esc(s.id)}">Nochmal 2 Minuten</button>
+      <div class="row" style="justify-content:center"><button class="btn primary" data-act="wk" data-s="${esc(s.id)}" data-sec="${esc((d.secs || []).join(","))}">Nochmal 2 Minuten</button>
       <button class="btn ghost" data-act="subject" data-s="${esc(s.id)}">Zu den Übungen</button></div></section>`;
     return;
   }
@@ -544,7 +572,8 @@ function solutionText(item) {
   if (item.type === "mc") return item.options[item.correct];
   if (item.type === "tf") return item.answer ? "Stimmt" : "Stimmt nicht";
   if (item.type === "order") return item.items.join(" → ");
-  if (item.type === "self" || item.type === "write") return item.a;
+  if (item.type === "write") return item.a.split(" / ")[0];
+  if (item.type === "self") return item.a;
 }
 function judge(ok) {
   const sol = solutionText(D.cur.item);
@@ -698,7 +727,7 @@ document.addEventListener("click", async e => {
     case "warm": startWarm(sid, tid); break;
     case "kuer": startKuer(sid, tid, b.dataset.k === "write" ? "write" : undefined); break;
     case "whint": D.cur.typed = $("#w-in")?.value || ""; D.cur.hint = true; render(); focusWrite(); break;
-    case "wk": startWK(sid); break;
+    case "wk": startWK(sid, (b.dataset.sec || "").split(",").filter(Boolean)); break;
     case "flip": H.flip = !H.flip; render(); break;
     case "hknow": {
       const k = tKey(H.s, H.t) + "|" + H.queue[0];
