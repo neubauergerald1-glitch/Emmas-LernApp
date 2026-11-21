@@ -98,7 +98,11 @@ function pool(subj, topic, kind) {
 const subjectPool = subj => subj.topics.flatMap(t => pool(subj, t));
 
 /* Schreibaufgaben prüfen */
-const normW = s => String(s).toLowerCase().replace(/[’‘`´]/g, "'").replace(/[.?!,;:]/g, " ").replace(/\s+/g, " ").trim();
+/* Kurzformen zählen wie Langformen: isn't = is not, I'm = I am, can't = cannot … */
+const normW = s => String(s).toLowerCase().replace(/[’‘`´]/g, "'")
+  .replace(/\bcan't\b/g, "cannot").replace(/\bwon't\b/g, "will not").replace(/n't\b/g, " not")
+  .replace(/\bi'm\b/g, "i am").replace(/'re\b/g, " are").replace(/\b(he|she|it|that|what|there|who|where)'s\b/g, "$1 is")
+  .replace(/[.?!,;:]/g, " ").replace(/\s+/g, " ").trim();
 function variantsW(a) {
   const out = new Set();
   String(a).split(/\s*[\/;]\s*/).forEach(p => {
@@ -412,6 +416,7 @@ function answer(ok, solution) {
     D.prog = D.mode === "wk" ? D.prog + 0.1 : D.correct / D.total;
     D.anim = "hop";
     D.fb = { ok: true, call: D.streak >= 3 ? pick(ELEMENTS_BIG) : pick(ELEMENTS), text: D.streak >= 3 ? `${D.streak} richtige in Folge!` : "", explain: item.explain };
+    if (item.type === "write" && /(^|[^a-zA-Z'])i([^a-zA-Z']|$)/.test(D.cur.typed || "")) D.fb.text = "Richtig! Aber Achtung: „I“ (ich) schreibt man im Englischen immer groß.";
     if (item.type === "write") { S.written = (S.written || 0) + 1; if (D.cur.noTo) D.fb.text = `Richtig! Im Test schreibst du am besten „${item.a.split(" / ")[0]}“ – mit „${item.a.split(" ")[0]}“.`; }
   } else {
     D.wobbles++; D.streak = 0; D.anim = "wobble"; D.missed.push(solution);
@@ -513,7 +518,8 @@ function questionHTML() {
       ${D.mode === "wk" && f.ok ? "" : `<div class="row"><button class="btn primary" id="next" data-act="${D.phase === "extra" ? "extradone" : "next"}">${D.phase === "extra" ? "Weiter" : last ? "Abgang und Landung!" : "Nächstes Element"}</button></div>`}
     </div>`;
   }
-  return `<section class="card"><span class="qtag">${tag}</span>${qtext}${body}${fb}</section>`;
+  const read = item.text ? `<div class="readtext">${item.title ? `<b>${esc(item.title)}</b>\n` : ""}${esc(item.text)}</div>` : "";
+  return `<section class="card"><span class="qtag">${tag}</span>${read}${qtext}${body}${fb}</section>`;
 }
 
 function renderKuer() {
