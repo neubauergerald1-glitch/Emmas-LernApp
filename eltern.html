@@ -37,6 +37,8 @@ body{margin:0}
 .word{border:2px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:800;background:var(--surface)}
 .word b{color:var(--bad);margin-left:6px;font-variant-numeric:tabular-nums}
 .note{font-size:.9rem;color:var(--muted);max-width:65ch}
+.examrow{display:flex;justify-content:space-between;align-items:center;gap:8px 14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
+.linkbtn{font-weight:700;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
 .copyrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .copyrow code{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--surface-2);padding:6px 10px;border-radius:10px;overflow-wrap:anywhere;min-width:0;flex:1}
 </style>
@@ -203,16 +205,21 @@ function render() {
     ${st.error ? `<p class="err">${esc(st.error)}</p>` : ""}
     ${lastTest ? `<p class="okbox">Verbindung funktioniert. Letzte Test-Nachricht von Emmas Gerät: ${dayLabel(new Date(lastTest.time * 1000))}, ${hm(new Date(lastTest.time * 1000))} Uhr.</p>` : ""}
     ${!FEED.length ? `<div class="empty"><h3>Noch nichts da</h3><p class="muted">Sobald Emma eine Übung beendet, erscheint sie hier. Damit das klappt, muss in Emmas Lernapp unter Pokalvitrine → Eltern-Benachrichtigung derselbe Code eingetragen sein. Am einfachsten öffnest du auf Emmas Gerät den Link unten bei „Einstellungen“.</p></div>` : ""}
+    <h2>Probeschularbeiten zum Ausdrucken</h2>
+    <div class="panel">
+      <p class="note">2. Schularbeit Englisch (Unit 4–7), je 50 Minuten, mit Lösungen und Notenschlüssel auf den letzten Seiten.</p>
+      ${[1, 2].map(n => `<div class="examrow"><b>Probeschularbeit ${n}</b>
+        <div class="row"><button class="btn small primary" data-act="printx" data-n="${n}">Drucken</button>
+        <a class="linkbtn" href="probeschularbeit-${n}.html">Als Seite öffnen</a>
+        <a class="linkbtn" href="Probeschularbeit-Englisch-${n}.pdf" download>PDF herunterladen</a></div></div>`).join("")}
+      <p class="note">Am Handy öffnet „Drucken“ das Teilen-Menü – dort „Drucken“ wählen (iPhone) bzw. „Drucken“ oder einen Drucker (Android). Am Computer erscheint direkt der Druckdialog.</p>
+      ${st.printMsg ? `<p class="err">${esc(st.printMsg)}</p>` : ""}
+    </div>
     ${words.length ? `<section class="panel"><h2>Diese Wörter fallen Emma schwer</h2><p class="note">Gezählt, wie oft Emma das Wort falsch hatte (aus allen gespeicherten Übungen).</p>
       <div class="words">${words.map(([w, n]) => `<span class="word">${esc(w)}<b>${n}×</b></span>`).join("")}</div></section>` : ""}
     ${subjBlocks}
     ${FEED.length ? `<h2>Verlauf</h2><div class="feed">${feed}</div>` : ""}
     <p class="note">Gratis-Dienst ntfy.sh: Neue Meldungen sind dort etwa 12 Stunden abrufbar. Was diese Seite einmal geladen hat, bleibt auf deinem Handy gespeichert. Öffne die Elternansicht also am besten einmal am Tag. Mit der App „ntfy“ (Kanal = Eltern-Code) bekommst du zusätzlich Push-Meldungen.</p>
-    <h2>Probeschularbeiten zum Ausdrucken</h2>
-    <div class="panel">
-      <p class="note">2. Schularbeit Englisch (Unit 4–7), je 50 Minuten, mit Lösungen und Notenschlüssel auf den letzten Seiten.</p>
-      <div class="row"><a class="btn small" href="Probeschularbeit-Englisch-1.pdf" target="_blank" rel="noopener">Probeschularbeit 1 (PDF)</a><a class="btn small" href="Probeschularbeit-Englisch-2.pdf" target="_blank" rel="noopener">Probeschularbeit 2 (PDF)</a></div>
-    </div>
     <h2>Einstellungen</h2>
     <div class="panel">
       <b>Link für Emmas Gerät</b>
@@ -242,6 +249,7 @@ document.addEventListener("click", e => {
     const done = () => { st.copied = true; render(); setTimeout(() => { st.copied = false; render(); }, 2000); };
     try { navigator.clipboard.writeText(txt).then(done, () => selectLink()); } catch { selectLink(); }
   }
+  if (a === "printx") printExam(+b.dataset.n);
   if (a === "askclear") { st.confirmClear = true; render(); }
   if (a === "nclear") { st.confirmClear = false; render(); }
   if (a === "clear") { hist = []; lsSet(HIST_KEY, hist); st.confirmClear = false; render(); }
@@ -250,6 +258,37 @@ function selectLink() { const el = $("#kidlink"); if (!el) return; const r = doc
 document.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "f-code") $('[data-act="savecode"]').click(); });
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
 setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 60000);
+/* Probeschularbeiten drucken: PDF vorab laden, damit das Teilen-Menü direkt nach dem Tippen aufgehen kann */
+const PDFS = {};
+[1, 2].forEach(n => fetch(`Probeschularbeit-Englisch-${n}.pdf`).then(r => r.ok ? r.blob() : null)
+  .then(bl => { if (bl) PDFS[n] = new File([bl], `Probeschularbeit-Englisch-${n}.pdf`, { type: "application/pdf" }); }).catch(() => {}));
+const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+function printExam(n) {
+  st.printMsg = "";
+  const f = PDFS[n];
+  if (mobile && f && navigator.canShare && navigator.canShare({ files: [f] })) {
+    navigator.share({ files: [f], title: `Probeschularbeit Englisch ${n}` }).catch(err => {
+      if (err && err.name === "AbortError") return;
+      printViaFrame(n);
+    });
+    return;
+  }
+  printViaFrame(n);
+}
+function printViaFrame(n) {
+  // Druckt die Webseiten-Version der Probeschularbeit (gleicher Inhalt wie das PDF)
+  document.getElementById("printframe")?.remove();
+  const fr = document.createElement("iframe");
+  fr.id = "printframe"; fr.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  fr.src = `probeschularbeit-${n}.html`;
+  fr.onload = () => {
+    setTimeout(() => {
+      try { fr.contentWindow.focus(); fr.contentWindow.print(); }
+      catch { location.href = `probeschularbeit-${n}.html`; }
+    }, 400);
+  };
+  document.body.appendChild(fr);
+}
 render(); refresh();
 </script>
 </body>
