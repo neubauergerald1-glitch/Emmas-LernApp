@@ -195,7 +195,9 @@ function board(extra) {
     <div class="ticker">${tick}</div>
   </section>`;
 }
-function subjProgress(s) {
+function subjProgress(s, topics) {
+  topics = topics || ARCHIV.info(s).active;
+  s = Object.assign({}, s, { topics });
   const cards = s.topics.reduce((n, t) => n + (t.cards || []).length, 0);
   const known = s.topics.reduce((n, t) => n + (t.cards || []).filter((_, i) => S.cards[tKey(s, t) + "|" + i]).length, 0);
   const medals = s.topics.map(t => S.topics[tKey(s, t)]?.medal || "");
@@ -218,7 +220,9 @@ function gym(progress, opts = {}) {
 }
 
 /* ========================= Navigation ========================= */
+let lastList = { name: "home" };
 function go(name, params = {}) {
+  if (["home", "subject", "archive"].includes(name)) lastList = Object.assign({ name }, params);
   if (D && D.timer) { clearInterval(D.timer); D.timer = null; }
   if (view.name === "kuer" && name !== "kuer" && D && D.phase === "play" && (D.correct || D.wobbles))
     logActivity({ kind: "abort", subj: D.s.name, topic: D.mode === "wk" ? "Wettkampf-Runde" : D.t.name, mode: D.mode === "wk" ? "Wettkampf" : D.kind === "write" ? "Schreiben" : "Turnen", correct: D.correct, wobbles: D.wobbles, missed: D.missed });
@@ -234,12 +238,15 @@ function render() {
   if (v === "kuer") return renderKuer();
   if (v === "add") return renderEditor();
   if (v === "vitrine") return renderVitrine();
+  if (v === "archive") return renderArchive();
   renderHome();
 }
 
 /* ========================= Emma: Start ========================= */
+function archiveCount() { return subjects().reduce((n, s) => n + ARCHIV.info(s).archivedTests.length, 0); }
 function renderHome() {
-  const list = subjects();
+  const list = subjects().filter(s => !ARCHIV.info(s).fullyArchived);
+  const nArch = archiveCount();
   const cards = list.map(s => {
     const p = subjProgress(s);
     const pct = p.cards ? Math.round(p.known / p.cards * 100) : 0;
@@ -259,6 +266,7 @@ function renderHome() {
     <div class="grid">${cards}
       <button class="subj add" data-act="add"><span class="plus">+</span><span class="eyebrow">Fach hinzufügen</span></button>
     </div>
+    ${nArch ? `<button class="archtile" data-act="archive"><span class="folder" aria-hidden="true"></span><span><b>Archiv</b><span class="muted">${nArch} vergangene Überprüfung${nArch === 1 ? "" : "en"} – jederzeit nachschauen und üben</span></span><span aria-hidden="true">›</span></button>` : ""}
     <div class="foot"><p class="sync">${esc(syncLabel)}</p><a class="linkbtn" href="eltern.html">Für Eltern</a></div>`;
 }
 
@@ -284,11 +292,13 @@ function topicRow(s, t, i) {
 const sectionTopics = (s, ids) => s.topics.filter(t => ids.includes(t.section));
 function renderSubject() {
   const s = getSubj(view.s); if (!s) return go("home");
+  const A = ARCHIV.info(s);
+  if (A.fullyArchived) return go("archive");
   const p = subjProgress(s), nt = nextTest(s);
   const secs = (s.sections && s.sections.length) ? s.sections : [{ id: null, name: "" }];
   let n = 0;
   const blocks = secs.map(sec => {
-    const ts = sec.id ? s.topics.filter(t => t.section === sec.id) : s.topics;
+    const ts = (sec.id ? s.topics.filter(t => t.section === sec.id) : s.topics).filter(t => !A.isArchived(t));
     if (!ts.length) return "";
     const head = sec.name ? `<div class="sechead"><h2>${esc(sec.name)}</h2>${sec.note ? `<p class="muted">${esc(sec.note)}</p>` : ""}</div>` : "";
     return `${head}<div class="plays">${ts.map(t => topicRow(s, t, n++)).join("")}</div>`;
@@ -313,8 +323,40 @@ function renderSubject() {
     ${upcomingTests(s).length > 1 ? `<div class="tests">${upcomingTests(s).map(t => `<div class="testcard"><span class="eyebrow">${fmtDate(t.date)}</span><b>${esc(t.name)}</b><span class="muted">${countdown(t.date)}</span></div>`).join("")}</div>` : ""}
     <p class="muted"><b>Aufwärmen</b> = Karteikarten lernen.${s.write ? ` <b>Schreiben</b> = jedes Wort oder jeden Satz selbst eintippen.` : ""} <b>Turnen</b> = Quiz am Schwebebalken${s.write ? " (gemischt: auswählen und schreiben)" : ""}: Jede richtige Antwort ist ein Element. Am Ende landest du auf der Matte und die Kampfrichterinnen geben dir eine Wertung.</p>
     ${probes}
-    ${blocks}`;
+    ${blocks}
+    ${A.archivedTests.length ? `<button class="archtile" data-act="archive"><span class="folder" aria-hidden="true"></span><span><b>Archiv</b><span class="muted">${A.archivedTests.map(t => esc(t.name) + " " + fmtDate(t.date)).join(" · ")}</span></span><span aria-hidden="true">›</span></button>` : ""}`;
 }
+
+/* ---------- Archiv ---------- */
+function renderArchive() {
+  const blocks = subjects().map(s => {
+    const A = ARCHIV.info(s);
+    if (!A.archivedTests.length) return "";
+    const folders = A.archivedTests.map((t, k) => {
+      const ts = A.topicsOf(t);
+      const secs = (s.sections && s.sections.length && t.sections) ? s.sections.filter(x => t.sections.includes(x.id)) : [{ id: null, name: "" }];
+      let n = 0;
+      const rows = secs.map(sec => {
+        const st = sec.id ? ts.filter(x => x.section === sec.id) : ts;
+        if (!st.length) return "";
+        return `${sec.name ? `<h3 class="archsec">${esc(sec.name.replace(/^Schularbeit · /, ""))}</h3>` : ""}<div class="plays">${st.map(x => topicRow(s, x, n++)).join("")}</div>`;
+      }).join("");
+      const medals = ts.filter(x => S.topics[tKey(s, x)]?.medal).length;
+      const probe = ts.flatMap(x => pool(s, x)).length >= 4 ? `<button class="btn small mat" data-act="wk" data-s="${esc(s.id)}" data-sec="${t.sections ? esc(t.sections.join(",")) : ""}">Wettkampf-Runde (2 Min.)</button>` : "";
+      return `<details class="archfolder" ${view.open === s.id + "|" + t.date + t.name ? "open" : ""} data-key="${esc(s.id + "|" + t.date + t.name)}">
+        <summary><span class="folder" aria-hidden="true"></span><span><b>${esc(s.name)} · ${esc(t.name)}</b><span class="muted">${fmtDate(t.date)} · ${ts.length} Übungen · ${medals} mit Medaille</span></span></summary>
+        <div class="archbody">${probe}${rows}</div>
+      </details>`;
+    }).join("");
+    return folders;
+  }).join("");
+  app.innerHTML = `${board("<b>Archiv</b> · vergangene Tests und Schularbeiten")}
+    <button class="back" data-act="home">← Alle Fächer</button>
+    <h1>Archiv</h1>
+    <p class="muted">Hier landen Tests und Schularbeiten ${ARCHIV.DAYS} Tage nach dem Termin. Alle Übungen kannst du weiter aufwärmen, schreiben und turnen – deine Medaillen bleiben erhalten.</p>
+    ${blocks || `<div class="empty"><h2>Noch leer</h2><p class="muted">Sobald ein Test vorbei ist, findest du ihn hier.</p></div>`}`;
+}
+document.addEventListener("toggle", e => { if (e.target.matches?.(".archfolder") && e.target.open) { view.open = e.target.dataset.key; if (lastList.name === "archive") lastList.open = view.open; } }, true);
 
 /* ---------- Aufwärmen (Karteikarten) ---------- */
 let H = null;
@@ -334,13 +376,13 @@ function renderWarm() {
           <button class="btn" data-act="warm" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Nochmal</button>
           <button class="btn primary" data-act="kuer" data-s="${esc(s.id)}" data-t="${esc(t.id)}">Jetzt turnen</button>
         </div>
-        <button class="back" data-act="subject" data-s="${esc(s.id)}" style="align-self:center">← Zu den Übungen</button>
+        <button class="back" data-act="back" style="align-self:center">← Zurück</button>
       </section>`;
     return;
   }
   const i = H.queue[0], c = t.cards[i];
   app.innerHTML = `${board(`<b>Aufwärmen</b> · ${esc(t.name)} · noch ${H.queue.length} Karte${H.queue.length === 1 ? "" : "n"}`)}
-    <button class="back" data-act="subject" data-s="${esc(s.id)}">← ${esc(s.name)}</button>
+    <button class="back" data-act="back">← Zurück</button>
     <button class="flash ${H.flip ? "flip" : ""}" data-act="flip" aria-label="Karte umdrehen">
       <div class="flash-in">
         <div class="face"><span class="hint">Frage · tippen zum Umdrehen</span><p class="big">${esc(c.q)}</p></div>
@@ -536,7 +578,7 @@ function renderKuer() {
         <div class="row" style="justify-content:center">
           ${d.bonus === "extra" ? `<button class="btn primary" data-act="extra">Zusatzelement versuchen (+1)</button>` : ""}
           <button class="btn ${d.bonus === "extra" ? "" : "primary"}" data-act="kuer" data-k="${d.kind}" data-s="${esc(s.id)}" data-t="${esc(d.t.id)}">Nochmal turnen</button>
-          <button class="btn ghost" data-act="subject" data-s="${esc(s.id)}">Zu den Übungen</button>
+          <button class="btn ghost" data-act="back">Zurück zur Liste</button>
         </div></section>`;
     return;
   }
@@ -547,7 +589,7 @@ function renderKuer() {
   if (d.phase === "extradone") {
     app.innerHTML = `${board()}<section class="card finale"><h2>Übung beendet – toll geturnt!</h2>
       <p class="pts">Diese Übung: <b>+${d.earned}</b> Sterne</p>${badgeNote(d.newBadges)}
-      <div class="row" style="justify-content:center"><button class="btn primary" data-act="subject" data-s="${esc(s.id)}">Zu den Übungen</button>
+      <div class="row" style="justify-content:center"><button class="btn primary" data-act="back">Zurück zur Liste</button>
       <button class="btn" data-act="kuer" data-k="${d.kind}" data-s="${esc(s.id)}" data-t="${esc(d.t.id)}">Nochmal turnen</button></div></section>`;
     return;
   }
@@ -557,7 +599,7 @@ function renderKuer() {
       <div class="statgrid"><div class="stat"><b>${d.correct}</b><span>Richtig</span></div><div class="stat"><b>${d.wobbles}</b><span>Wackler</span></div><div class="stat"><b>${d.kCount * 6 + d.correct}</b><span>Sterne</span></div><div class="stat"><b>${S.wkBest}</b><span>Rekord</span></div></div>
       ${badgeNote(d.newBadges)}
       <div class="row" style="justify-content:center"><button class="btn primary" data-act="wk" data-s="${esc(s.id)}" data-sec="${esc((d.secs || []).join(","))}">Nochmal 2 Minuten</button>
-      <button class="btn ghost" data-act="subject" data-s="${esc(s.id)}">Zu den Übungen</button></div></section>`;
+      <button class="btn ghost" data-act="back">Zurück zur Liste</button></div></section>`;
     return;
   }
   const combo = `<span class="combo" aria-label="${d.streak} richtige in Folge">${[0, 1, 2].map(i => `<i class="${d.streak > i ? "on" : ""}"></i>`).join("")}</span>`;
@@ -565,7 +607,7 @@ function renderKuer() {
     ? `<span>Element ${Math.min(d.correct + 1, d.total)} von ${d.total}</span><span>Serie ${combo}</span><span>Wackler: <b>${d.wobbles}</b></span>`
     : `<span>Übungen: <b>${d.kCount}</b></span><span>Serie ${combo}</span><span id="timer" class="timer ${d.time <= 15 ? "low" : ""}">${fmtTime(d.time)}</span>`;
   app.innerHTML = `${board(`<b>${d.mode === "wk" ? "Wettkampf-Runde" : esc(d.t.name) + (d.kind === "write" ? " · Schreiben" : "")}</b> · ${esc(s.name)}`)}
-    <div class="spread"><button class="back" data-act="subject" data-s="${esc(s.id)}">← Übung abbrechen</button></div>
+    <div class="spread"><button class="back" data-act="back">← Übung abbrechen</button></div>
     ${gym(d.prog, { from: d.prev, anim: d.anim, ticks: d.mode === "kuer" ? d.total : 10, done: d.mode === "kuer" ? d.correct : Math.round(d.prog * 10) })}
     <div class="status">${st}</div>
     ${d.cur ? questionHTML() : ""}`;
@@ -724,6 +766,8 @@ document.addEventListener("click", async e => {
   switch (a) {
     case "home": go("home"); break;
     case "subject": go("subject", { s: sid }); break;
+    case "back": go(lastList.name, lastList); break;
+    case "archive": go("archive"); break;
     case "add": go("add"); break;
     case "edit": go("add", { edit: sid }); break;
     case "vitrine": go("vitrine"); break;

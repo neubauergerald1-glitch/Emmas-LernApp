@@ -6,6 +6,7 @@ Lern-App im Turn-Stil für Emma: Aufwärmen mit Karteikarten, Übungen am Schweb
 - **Eltern-App:** `eltern.html` (zum Homescreen hinzufügen → „Emma Eltern“)
 - **Fest eingebaute Fächer:** `content.js` (aktuell: Englisch – Vokabeltest 26.11.2026, 2. Schularbeit 27.11.2026 mit Unit 4–7)
 - **Probeschularbeiten:** `Probeschularbeit-Englisch-1.pdf` und `-2.pdf` (auch verlinkt in der Eltern-App)
+- **Archiv:** 3 Tage nach einem Test oder einer Schularbeit wandern die zugehörigen Übungen automatisch in den Archiv-Ordner (`archive.js`). Dort bleiben sie spielbar, in der Eltern-App stehen sie unter „Archiv“.
 - Weitere Fächer lassen sich in der App über „+ Fach hinzufügen“ anlegen.
 - Fortschritt und eigene Fächer werden im Browser von Emmas Gerät gespeichert.
 

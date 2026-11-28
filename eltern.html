@@ -37,6 +37,9 @@ body{margin:0}
 .word{border:2px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:800;background:var(--surface)}
 .word b{color:var(--bad);margin-left:6px;font-variant-numeric:tabular-nums}
 .note{font-size:.9rem;color:var(--muted);max-width:65ch}
+.parch{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:10px 14px}
+.parch summary{cursor:pointer;font-weight:800;color:var(--muted)}
+.parch[open] summary{margin-bottom:10px}
 .examrow{display:flex;justify-content:space-between;align-items:center;gap:8px 14px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
 .linkbtn{font-weight:700;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
 .copyrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -46,6 +49,7 @@ body{margin:0}
 <body>
 <main class="wrap" id="app" aria-live="polite"></main>
 <script src="content.js"></script>
+<script src="archive.js"></script>
 <script>
 /* Elternansicht: liest Emmas Meldungen vom ntfy-Kanal (Eltern-Code) und speichert sie auf diesem Handy. */
 const CODE_KEY = "emma_parent_code", HIST_KEY = "emma_parent_hist";
@@ -156,9 +160,13 @@ function render() {
   const subjNames = [...new Set([...BUILT.map(s => s.name), ...P.map(e => e.subj).filter(Boolean)])];
   const subjBlocks = subjNames.map(name => {
     const b = BUILT.find(s => s.name === name);
-    const topicNames = [...new Set([...(b ? b.topics.map(t => t.name) : []), ...P.filter(e => e.subj === name && e.topic).map(e => e.topic)])];
-    if (!topicNames.length) return "";
-    const rows = topicNames.map(tn => {
+    const A = b ? ARCHIV.info(b) : null;
+    const archNames = new Set(A ? A.archived.map(t => t.name) : []);
+    const allNames = [...new Set([...(b ? b.topics.map(t => t.name) : []), ...P.filter(e => e.subj === name && e.topic).map(e => e.topic)])];
+    const topicNames = allNames.filter(tn => !archNames.has(tn));
+    const archList = allNames.filter(tn => archNames.has(tn));
+    if (!allNames.length) return "";
+    const row = tn => {
       const es = P.filter(e => e.subj === name && e.topic === tn);
       const best = es.filter(e => e.medal).sort((x, y) => RANK[y.medal] - RANK[x.medal])[0];
       const nW = es.filter(e => e.kind === "kuer" && e.mode === "Schreiben").length, nT = es.filter(e => e.kind === "kuer" && e.mode === "Turnen").length;
@@ -167,11 +175,13 @@ function render() {
         + (nW ? `<span class="chip">${nW}× Schreiben</span>` : "") + (nT ? `<span class="chip">${nT}× Turnen</span>` : "")
         + (warm ? `<span class="chip ok">${warm}× Aufwärmen</span>` : "") + (!es.length ? `<span class="chip">noch nicht geübt</span>` : "");
       return `<div class="topic"><span>${esc(tn)}</span><span class="chips">${chips}</span></div>`;
-    }).join("");
+    };
+    const rows = topicNames.map(row).join("");
+    const arch = archList.length ? `<details class="parch"><summary>Archiv: ${A.archivedTests.map(t => esc(t.name) + " " + t.date.split("-").reverse().slice(0, 2).join(".") + ".").join(" · ")} (${archList.length} Übungen)</summary><div class="topics">${archList.map(row).join("")}</div></details>` : "";
     const done = topicNames.filter(tn => P.some(e => e.subj === name && e.topic === tn && e.medal)).length;
     const nt = b && (b.tests || (b.test ? [{ name: "Test", date: b.test }] : [])).filter(t => countdown(t.date)).sort((x, y) => x.date.localeCompare(y.date))[0];
     const cd = nt ? `${nt.name}: ${countdown(nt.date)}` : "";
-    return `<section style="display:flex;flex-direction:column;gap:10px"><div class="spread"><h2>${esc(name)}</h2><span class="muted">${done}/${topicNames.length} Übungen mit Medaille${cd ? ` · <b>${cd}</b>` : ""}</span></div><div class="topics">${rows}</div></section>`;
+    return `<section style="display:flex;flex-direction:column;gap:10px"><div class="spread"><h2>${esc(name)}</h2><span class="muted">${done}/${topicNames.length} Übungen mit Medaille${cd ? ` · <b>${cd}</b>` : ""}</span></div><div class="topics">${rows || `<p class="note">Gerade keine aktuellen Übungen – alles ist im Archiv.</p>`}</div>${arch}</section>`;
   }).join("");
 
   // Verlauf
@@ -205,7 +215,8 @@ function render() {
     ${st.error ? `<p class="err">${esc(st.error)}</p>` : ""}
     ${lastTest ? `<p class="okbox">Verbindung funktioniert. Letzte Test-Nachricht von Emmas Gerät: ${dayLabel(new Date(lastTest.time * 1000))}, ${hm(new Date(lastTest.time * 1000))} Uhr.</p>` : ""}
     ${!FEED.length ? `<div class="empty"><h3>Noch nichts da</h3><p class="muted">Sobald Emma eine Übung beendet, erscheint sie hier. Damit das klappt, muss in Emmas Lernapp unter Pokalvitrine → Eltern-Benachrichtigung derselbe Code eingetragen sein. Am einfachsten öffnest du auf Emmas Gerät den Link unten bei „Einstellungen“.</p></div>` : ""}
-    <h2>Probeschularbeiten zum Ausdrucken</h2>
+    ${(() => { const en = BUILT.find(s => s.id === "englisch"); const sa = en && ARCHIV.info(en).tests.find(t => t.name === "Schularbeit"); return sa && sa.archived; })()
+      ? `<details class="parch"><summary>Archiv: Probeschularbeiten (2. Schularbeit Englisch)</summary>
     <div class="panel">
       <p class="note">2. Schularbeit Englisch (Unit 4–7), je 50 Minuten, mit Lösungen und Notenschlüssel auf den letzten Seiten.</p>
       ${[1, 2].map(n => `<div class="examrow"><b>Probeschularbeit ${n}</b>
@@ -214,7 +225,17 @@ function render() {
         <a class="linkbtn" href="Probeschularbeit-Englisch-${n}.pdf" download>PDF herunterladen</a></div></div>`).join("")}
       <p class="note">Am Handy öffnet „Drucken“ das Teilen-Menü – dort „Drucken“ wählen (iPhone) bzw. „Drucken“ oder einen Drucker (Android). Am Computer erscheint direkt der Druckdialog.</p>
       ${st.printMsg ? `<p class="err">${esc(st.printMsg)}</p>` : ""}
-    </div>
+    </div></details>`
+      : `<h2>Probeschularbeiten zum Ausdrucken</h2>
+    <div class="panel">
+      <p class="note">2. Schularbeit Englisch (Unit 4–7), je 50 Minuten, mit Lösungen und Notenschlüssel auf den letzten Seiten.</p>
+      ${[1, 2].map(n => `<div class="examrow"><b>Probeschularbeit ${n}</b>
+        <div class="row"><button class="btn small primary" data-act="printx" data-n="${n}">Drucken</button>
+        <a class="linkbtn" href="probeschularbeit-${n}.html">Als Seite öffnen</a>
+        <a class="linkbtn" href="Probeschularbeit-Englisch-${n}.pdf" download>PDF herunterladen</a></div></div>`).join("")}
+      <p class="note">Am Handy öffnet „Drucken“ das Teilen-Menü – dort „Drucken“ wählen (iPhone) bzw. „Drucken“ oder einen Drucker (Android). Am Computer erscheint direkt der Druckdialog.</p>
+      ${st.printMsg ? `<p class="err">${esc(st.printMsg)}</p>` : ""}
+    </div>`}
     ${words.length ? `<section class="panel"><h2>Diese Wörter fallen Emma schwer</h2><p class="note">Gezählt, wie oft Emma das Wort falsch hatte (aus allen gespeicherten Übungen).</p>
       <div class="words">${words.map(([w, n]) => `<span class="word">${esc(w)}<b>${n}×</b></span>`).join("")}</div></section>` : ""}
     ${subjBlocks}
